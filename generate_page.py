@@ -1,150 +1,71 @@
 import yfinance as yf
-import plotly.graph_objects as go
-from datetime import datetime
+import pandas as pd
+import json
 import os
+from datetime import datetime
 
-# Create docs folder
-os.makedirs("docs", exist_ok=True)
+# Create folders
+os.makedirs("docs/data", exist_ok=True)
+os.makedirs("docs/saved", exist_ok=True)
 
-# Stock ticker
-ticker = "XOM"
+# Stock symbol
+symbol = "XOM"
 
-# Download stock data
-data = yf.download(
-    ticker,
-    period="6mo",
-    interval="1d",
-    auto_adjust=True
-)
+# Timeframes
+TIMEFRAMES = {
+    "1D": {"period": "1d", "interval": "5m"},
+    "3D": {"period": "3d", "interval": "15m"},
+    "1W": {"period": "7d", "interval": "30m"},
+    "1M": {"period": "1mo", "interval": "1d"},
+    "6M": {"period": "6mo", "interval": "1d"},
+    "1Y": {"period": "1y", "interval": "1d"},
+}
 
-# Extract close prices
-close_prices = data["Close"].squeeze()
+all_data = {}
 
-# Latest values
-latest_price = round(float(close_prices.iloc[-1]), 2)
-previous_price = round(float(close_prices.iloc[-2]), 2)
+# Download data for each timeframe
+for tf, config in TIMEFRAMES.items():
 
-change = round(latest_price - previous_price, 2)
-percent = round((change / previous_price) * 100, 2)
-
-# Trend
-trend = "Bullish 📈" if change > 0 else "Bearish 📉"
-
-# Analysis text
-analysis = f"""
-Latest Close Price: ${latest_price}
-
-Daily Change: {change} ({percent}%)
-
-Trend: {trend}
-
-Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
-"""
-
-# Create interactive graph
-fig = go.Figure()
-
-fig.add_trace(
-    go.Scatter(
-        x=close_prices.index,
-        y=close_prices.values,
-        mode='lines',
-        name='XOM Price',
-        line=dict(width=3),
-
-        hovertemplate=
-        '<b>Date:</b> %{x}<br>' +
-        '<b>Price:</b> $%{y:.2f}<extra></extra>'
+    data = yf.download(
+        symbol,
+        period=config["period"],
+        interval=config["interval"],
+        auto_adjust=True,
+        progress=False
     )
-)
 
-# Layout
-fig.update_layout(
-    title="Interactive XOM Stock Price",
-    xaxis_title="Date",
-    yaxis_title="Price ($)",
+    data = data.reset_index()
 
-    template="plotly_white",
+    records = []
 
-    hovermode="x unified",
+    for _, row in data.iterrows():
 
-    height=650,
+        records.append({
 
-    xaxis=dict(
-        rangeslider=dict(visible=True),
-        type="date"
-    )
-)
+            "Date": str(row.iloc[0]),
 
-# Convert graph to HTML
-graph_html = fig.to_html(
-    full_html=False,
-    include_plotlyjs='cdn'
-)
+            "Open": float(row["Open"].item()),
 
-# Create webpage
-html = f"""
-<!DOCTYPE html>
-<html>
+            "High": float(row["High"].item()),
 
-<head>
+            "Low": float(row["Low"].item()),
 
-<title>XOM Interactive Tracker</title>
+            "Close": float(row["Close"].item())
 
-<style>
+        })
 
-body {{
-    font-family: Arial;
-    background: #f4f4f4;
-    padding: 40px;
-}}
+    all_data[tf] = records
 
-.container {{
-    background: white;
-    max-width: 1200px;
-    margin: auto;
-    padding: 30px;
-    border-radius: 12px;
-}}
+# Save latest dataset
+with open("docs/data/latest.json", "w") as f:
 
-.analysis {{
-    margin-top: 30px;
-    padding: 20px;
-    background: #fafafa;
-    border-left: 5px solid #007BFF;
-    white-space: pre-line;
-    font-size: 18px;
-}}
+    json.dump(all_data, f)
 
-h1 {{
-    text-align: center;
-}}
+# Save archive copy
+save_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-</style>
+with open(f"docs/saved/{save_name}.json", "w") as f:
 
-</head>
+    json.dump(all_data, f)
 
-<body>
-
-<div class="container">
-
-<h1>XOM Interactive Daily Tracker</h1>
-
-{graph_html}
-
-<div class="analysis">
-{analysis}
-</div>
-
-</div>
-
-</body>
-
-</html>
-"""
-
-# Save webpage
-with open("docs/index.html", "w") as f:
-    f.write(html)
-
-print("Interactive website generated successfully.")
+print("Dashboard data generated successfully.")
